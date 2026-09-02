@@ -1,0 +1,20 @@
+[project]
+name = "readr"
+version = "0.1.0"
+description = "A TUI to make reading more enjoyable"
+readme = "README.md"
+authors = [
+    { name = "Divyendu Dutta", email = "connect2divyendu@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "google-genai>=2.22.0",
+    "trafilatura>=2.2.0",
+]
+
+[project.scripts]
+readr = "readr:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

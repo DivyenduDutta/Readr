@@ -1,2 +1,3 @@
-# Readr
-A TUI to make reading enjoyable
+### Readr
+
+A TUI that makes reading more enjoyable.
