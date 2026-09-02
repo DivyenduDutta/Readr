@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "google-genai>=2.22.0",
+    "python-dotenv>=1.2.3",
     "trafilatura>=2.2.0",
 ]
 
