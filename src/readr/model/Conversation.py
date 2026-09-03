@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 from typing import Tuple, Dict
 from google import genai
 from google.genai.interactions import Interaction
+from readr.utils.file_reader import retrieve_file_contents
+from readr.constants.file_constants import FileConstants
 
 class Conversation:
     '''
@@ -71,6 +73,7 @@ class Conversation:
             interaction = self.client.interactions.create(
                 model = self.model_name,
                 store = False, # opt out of server side storage
+                system_instruction =  retrieve_file_contents(FileConstants.SYSTEM_INSTRUCTION_PROMPT_FILE_NAME.value),
                 input = self.history,
                 previous_interaction_id = self.previous_interaction_id if self.previous_interaction_id else None
             )
