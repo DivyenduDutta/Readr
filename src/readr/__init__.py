@@ -23,9 +23,9 @@ def main() -> None:
             print(f"Current interaction total tokens: {current_interaction_tokens['total']}") 
             print("=" * 50)
             print("\n")
-            print(f"Input tokens: {total_tokens['input']}")
-            print(f"Output tokens: {total_tokens['output']}")
-            print(f"Total tokens: {total_tokens['total']}")
+            print(f"Overall Input tokens: {total_tokens['input']}")
+            print(f"Overall Output tokens: {total_tokens['output']}")
+            print(f"Overall Total tokens: {total_tokens['total']}")
             print("=" * 50)
             print("\n\n")
     except Exception as e:
