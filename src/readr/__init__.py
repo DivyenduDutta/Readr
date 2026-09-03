@@ -16,8 +16,18 @@ def main() -> None:
             user_input = input("\n\n Ask a question (or type 'exit' to quit): ")
             if user_input.lower() == 'exit':
                 break
-            response = conversation.ask(user_input)
+            response, total_tokens, current_interaction_tokens = conversation.ask(user_input)
             print(f"\n\n Question: {user_input}\n\n Response: {response}")
+            print(f"Current interaction input tokens: {current_interaction_tokens['input']}")
+            print(f"Current interaction output tokens: {current_interaction_tokens['output']}")
+            print(f"Current interaction total tokens: {current_interaction_tokens['total']}") 
+            print("=" * 50)
+            print("\n")
+            print(f"Input tokens: {total_tokens['input']}")
+            print(f"Output tokens: {total_tokens['output']}")
+            print(f"Total tokens: {total_tokens['total']}")
+            print("=" * 50)
+            print("\n\n")
     except Exception as e:
         print(f"\n\nAn error occurred: {e}")
     finally:
