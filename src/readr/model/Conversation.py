@@ -35,6 +35,13 @@ class Conversation:
             }
         )
 
+    def _remove_most_recent_from_history(self):
+        '''
+        Removes the most recent entry from the conversation history.
+        '''
+        if self.history:
+            self.history.pop()
+
     def _create_interaction(self) -> Interaction:
         '''
         Creates an interaction with the Google Gemini API.
@@ -79,6 +86,7 @@ class Conversation:
         self._add_to_history(question)
         interaction = self._create_interaction()
         if interaction is None:
+            self._remove_most_recent_from_history()
             raise ValueError("Error: Interaction could not be created")
         response = interaction.steps[-1].content[0].text
         self._save_interaction_steps(interaction)
