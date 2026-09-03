@@ -6,6 +6,8 @@ from google.genai.interactions import Interaction
 class Conversation:
     '''
     A class to manage a conversation with the Google Gemini API.
+    Maintains a history of user inputs and model responses, and 
+    provides methods to ask questions and retrieve responses.
     '''
     def __init__(self, model_name: str):
         '''
