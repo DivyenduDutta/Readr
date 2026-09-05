@@ -1,10 +1,11 @@
 import os
+import re
+from uuid import uuid4 as uuid
 from dotenv import load_dotenv
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 from google import genai
 from google.genai.interactions import Interaction
-from readr.utils.file_reader import retrieve_file_contents
-from readr.constants.file_constants import FileConstants
+from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
 
 class Conversation:
     '''
@@ -19,10 +20,13 @@ class Conversation:
         Args:
             model_name (str): The name of the model to use for the conversation.
         '''
+        self.id = uuid().hex
         self.model_name = model_name
+        self.title = None
         self.history = list()
         load_dotenv()
         self.client = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
+        self.config = load_config("readr.yml")
 
         # this is used to keep track of the previous interaction id for getting back the 
         # token usage in that interaction
@@ -73,7 +77,7 @@ class Conversation:
             interaction = self.client.interactions.create(
                 model = self.model_name,
                 store = False, # opt out of server side storage
-                system_instruction =  retrieve_file_contents(FileConstants.SYSTEM_INSTRUCTION_PROMPT_FILE_NAME.value),
+                system_instruction =  retrieve_file_contents(self.config["model"]["system_instruction_prompt"]),
                 input = self.history,
                 previous_interaction_id = self.previous_interaction_id if self.previous_interaction_id else None
             )
@@ -112,6 +116,20 @@ class Conversation:
         self.total_tokens["output"] = interaction.usage.total_output_tokens
         self.total_tokens["total"] = interaction.usage.total_tokens
 
+    def _extract_title_from_interaction(self, response: str) -> str:
+        '''
+        Extracts a title from the interaction's response.
+        This method looks for a line in the response that starts with "[Title]:" and captures the 
+        text that follows as the title. If no such line is found, it returns a default title.
+        This behavior of expecting a title in the response is defined in the ssystem instruction prompt 
+        file.
+        '''
+        match = re.search(r"\[Title\]:\s*(.+)", response)
+        title = "Whats in a title"  # Default title if not found
+        if match:
+            title = match.group(1)
+        return title
+
 
     def ask(self, question: str) -> Tuple[str, Dict[str, int], Dict[str, int]]:
         '''
@@ -119,8 +137,8 @@ class Conversation:
 
         1. Adds the question to the conversation history.
         2. Creates an interaction with the model.
-        3. If the interaction is successful, retrieves the model's response, saves the interaction 
-           steps to history, and records the token usage.
+        3. If the interaction is successful, retrieves the model's response, extracts a title, saves 
+           the interaction steps to history, and records the token usage.
         4. If the interaction fails, removes the most recent question from the history and raises a 
            ValueError.
         5. Responds with the model's answer, total token usage, and current interaction token usage.
@@ -141,10 +159,47 @@ class Conversation:
             self.previous_interaction_id = None
             raise ValueError("Error: Interaction could not be created")
         response = interaction.steps[-1].content[0].text
+        self.title = self._extract_title_from_interaction(response) if self.title is None else self.title
         self._save_interaction_steps(interaction)
         self._record_usage_tokens(interaction)
         self.previous_interaction_id = interaction.id
         return response, self.total_tokens, self.current_interaction_tokens
+
+    def persist(self):
+        '''
+        Persists the conversation history to a file.
+        '''
+        if self.title is not None:
+            conversation_context_to_persist = {
+                "id" : self.id,
+                "title": self.title,
+                "model_name": self.model_name,
+                "history": self.history,
+                "previous_interaction_id": self.previous_interaction_id,
+                "total_tokens": self.total_tokens
+            }
+            file_name = self.title.replace(" ", "_") + ".json"
+            relative_path = self.config["session"]["base_path"] + file_name
+            try:
+                save_file_contents(relative_path, conversation_context_to_persist)
+                print(f"\n{self.title} : Session saved.")
+            except Exception as e:
+                raise Exception(f"\n\nAn error occurred while persisting the conversation: {e}")
+
+
+    def reload_session_data(self, prior_session_data : Dict[str, Any]):
+        '''
+        Reload provided session data into the conversation.
+
+        Args:
+            prior_session_data (Dict[str, Any]) : Previous session data to be reloaded.
+        '''
+        self.id = prior_session_data['id']
+        self.model_name = prior_session_data['model_name']
+        self.title = prior_session_data['title']
+        self.history = prior_session_data['history']
+        self.previous_interaction_id = prior_session_data['previous_interaction_id']
+        self.total_tokens = prior_session_data['total_tokens']
 
     def close(self):
         '''

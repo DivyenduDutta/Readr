@@ -1,20 +1,67 @@
-from trafilatura import fetch_url, extract
+import os
+from typing import Union, Any, Dict
 
+from trafilatura import fetch_url, extract
+from readr.utils.file import load_config, retrieve_file_contents
 from readr.model.Conversation import Conversation
 
 URL = "https://ploum.net/2026-09-02-i_dont_have_a_smartphone.html"
-MODEL = "gemini-3.6-flash"
+
+def session_selector(session_path: str) -> Union[str, None]:
+    '''
+    Show user a list of existing sessions (if available).
+    The user can select an existing session to reload or start a new session.
+
+    Args: 
+        session_path (Union[str, None]) : Relative path of the folder where prior sessions are stored.
+                                          Relative to CWD.
+
+    Returns:
+        str : The user selected session file or None (in case of new session)
+    '''
+    try:
+        session_files = os.listdir(os.getcwd() + session_path)
+        if not session_files:
+            print(f"\n\nNo prior sessions found in {session_path}.")
+            return
+
+        print(f"\n\n{len(session_files)} prior sessions found : ")
+        for index, file_name in enumerate(session_files):
+            session_name = file_name.replace("_", " ").replace(".json", "")
+            print(f"{index+1}. {session_name}")
+        user_input = input("\n Please select an appropriate session (or type /new to start a new one) : ")
+        if user_input == "/new":
+            return None
+        elif int(user_input) in range(1, len(session_files)+1):  
+            return session_files[int(user_input)-1]
+    except Exception as e:
+        print(f"\n\nAn error occurred while trying to list prior sessions: {e}")
 
 def main() -> None:
-    page = fetch_url(URL)
-    text = extract(page)
-
-    conversation = Conversation(model_name=MODEL)
+    #page = fetch_url(URL)
+    #text = extract(page)
 
     try:
+        config = load_config("readr.yml")
+        selected_session_file = session_selector(config["session"]["base_path"])
+        prior_session_data = None
+        if selected_session_file is not None:
+            selected_session_path = config["session"]["base_path"] + selected_session_file
+            prior_session_data = retrieve_file_contents(selected_session_path, is_json=True)
+
+        conversation = Conversation(model_name=config["model"]["name"])
+
+        # reload prior session data into current conversation
+        if prior_session_data:
+            conversation.reload_session_data(prior_session_data)
+            print("\nSelected session data loaded. Please continue conversation.")
+        else:
+            print("\nNew session started.")
+
         while True:
-            user_input = input("\n\n Ask a question (or type 'exit' to quit): ")
-            if user_input.lower() == 'exit':
+            user_input = input("\n\n Ask a question (or type '/quit' to quit): ")
+            if user_input.lower() == '/quit':
+                conversation.persist()
                 break
             response, total_tokens, current_interaction_tokens = conversation.ask(user_input)
             print(f"\n\n Question: {user_input}\n\n Response: {response}")
