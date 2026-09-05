@@ -1,4 +1,4 @@
-model : 
+model :
   name : "gemini-3.5-flash"
   system_instruction_prompt : "/src/res/system_instruction_prompt.md"
 session :
