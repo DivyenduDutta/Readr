@@ -12,3 +12,6 @@ wheels/
 .env
 
 *.code-workspace
+
+# Ignore sample sessions
+src/res/sessions/*.json
