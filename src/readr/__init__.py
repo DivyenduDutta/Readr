@@ -12,11 +12,12 @@ def session_selector(session_path: str) -> str | None:
     The user can select an existing session to reload or start a new session.
 
     Args:
-        session_path (Union[str, None]) : Relative path of the folder where prior sessions are stored.
-                                          Relative to CWD.
+        session_path (str): Relative path of the folder where prior sessions are stored.
+                             Relative to CWD.
 
     Returns:
-        str : The user selected session file or None (in case of new session)
+        str | None: The selected session file name, or None if the user chose to start a
+                    new session, no prior sessions exist, or the selection was invalid.
     """
     try:
         session_files = os.listdir(os.getcwd() + session_path)
@@ -41,6 +42,16 @@ def session_selector(session_path: str) -> str | None:
 
 
 def main() -> None:
+    """
+    Entry point for the reading companion REPL.
+
+    Loads config, offers to reload a prior session or start a new one, then loops
+    reading questions from stdin and printing the model's response and token usage
+    until the user types '/quit', at which point the session is persisted.
+
+    Errors from config loading, session reload, or the conversation loop are caught
+    and printed rather than propagated.
+    """
     # page = fetch_url(URL)
     # text = extract(page)
 

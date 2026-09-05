@@ -102,7 +102,14 @@ class Conversation:
                 self.history.append(step.model_dump())
 
     def _record_usage_tokens(self, interaction: Interaction):
-        """Record token usage for the current interaction."""
+        """
+        Record token usage for the current interaction.
+
+        Args:
+            interaction (Interaction): The interaction to record usage from. Its
+                                       cumulative usage is diffed against the running
+                                       totals to derive this interaction's own usage.
+        """
 
         if not interaction.usage:
             print("No tokens available for the interaction. Will hold prior values.")
@@ -135,8 +142,14 @@ class Conversation:
         Extracts a title from the interaction's response.
         This method looks for a line in the response that starts with "[Title]:" and captures the
         text that follows as the title. If no such line is found, it returns a default title.
-        This behavior of expecting a title in the response is defined in the ssystem instruction prompt
+        This behavior of expecting a title in the response is defined in the system instruction prompt
         file.
+
+        Args:
+            response (str): The model's response text to search for a title line.
+
+        Returns:
+            str: The extracted title, or a default placeholder if none was found.
         """
         match = re.search(r"\[Title\]:\s*(.+)", response)
         title = "Whats in a title"  # Default title if not found
@@ -164,7 +177,7 @@ class Conversation:
             interaction token usage.
         Raises:
             ValueError: If the interaction could not be created.
-            TyepeError: If the interaction is streaming type.
+            TypeError: If the created interaction is not a non-streaming response.
         """
         self._add_to_history(question)
         try:
@@ -191,6 +204,12 @@ class Conversation:
     def persist(self):
         """
         Persists the conversation history to a file.
+
+        Does nothing if no title has been set yet (i.e. no successful `ask()` call
+        has occurred), since the title is used to derive the session's file name.
+
+        Raises:
+            RuntimeError: If writing the session file fails.
         """
         if self.title is not None:
             conversation_context_to_persist = {

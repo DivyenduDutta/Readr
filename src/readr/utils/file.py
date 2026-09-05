@@ -14,8 +14,12 @@ def retrieve_file_contents(
 
     Args:
         relative_path (str): The relative path to the file. Relative to the CWD.
+        is_json (bool): If True, parse the file as JSON and return a dict.
+                        If False (default), return the raw file contents as a string.
     Returns:
        str | dict[str, Any] : The contents of the file.
+    Raises:
+        FileNotFoundError: If no file exists at relative_path.
     """
     try:
         file_path = Path(os.getcwd() + relative_path)
@@ -35,6 +39,9 @@ def save_file_contents(relative_path: str, content: dict[str, Any]) -> None:
     Args:
         relative_path (str): The relative path to the file. Relative to the CWD.
         content (dict[str, Any]): The content to be saved.
+    Raises:
+        RuntimeError: If the file cannot be written (I/O error) or content is not
+                     JSON-serializable.
     """
     try:
         file_path = Path(os.getcwd() + relative_path)
@@ -53,6 +60,9 @@ def load_config(file_name: str) -> dict[str, Any]:
 
     Returns:
         dict[str, Any]: The configuration content.
+    Raises:
+        FileNotFoundError: If no config file exists with the given name under
+                           src/res/configs/.
     """
     try:
         file_path = Path(os.getcwd()) / "src" / "res" / "configs" / file_name
