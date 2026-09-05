@@ -1,17 +1,17 @@
 import os
 import json
 import yaml
-from typing import Dict, Any
+from typing import Union, Dict, Any
 from pathlib import Path
 
-def retrieve_file_contents(relative_path: str, is_json: bool = False) -> str:
+def retrieve_file_contents(relative_path: str, is_json: bool = False) -> Union[str, Dict[str, Any]]:
     '''
     Retrieves the contents of a file.
 
     Args:
         relative_path (str): The relative path to the file. Relative to the CWD.
     Returns:
-        str: The contents of the file.
+       Union[str, Dict[str, Any]] : The contents of the file.
     '''
     try:
         file_path = Path(os.getcwd() + relative_path)
