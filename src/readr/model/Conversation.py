@@ -8,6 +8,7 @@ from google import genai
 from google.genai.interactions import Interaction
 
 from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
+from readr.utils.logger import LoggerConfig
 
 # Setup to handle GenAiError but fallback to broad Exception if google-genai
 # makes breaking changes. Could be possible since its imported from privately
@@ -16,6 +17,8 @@ try:
     from google.genai._gaos.errors import GenAiError
 except ImportError:
     GenAiError = Exception
+
+LOGGER = LoggerConfig().logger
 
 
 class Conversation:
@@ -87,16 +90,16 @@ class Conversation:
                 stream=False,
             )
             if not isinstance(interaction, Interaction):
-                print("\nExpected a non-streaming response")
+                LOGGER.error("\nExpected a non-streaming response")
                 return None
             return interaction
         except RuntimeError as e:
-            print(
+            LOGGER.error(
                 f"\n\nAn error occurred while loading system instruction prompt file : {e}"
             )
             return None
         except GenAiError as e:
-            print(
+            LOGGER.error(
                 f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
             )
             return None

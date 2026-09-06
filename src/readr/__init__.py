@@ -2,8 +2,11 @@ import os
 
 from readr.model.Conversation import Conversation
 from readr.utils.file import load_config, retrieve_file_contents
+from readr.utils.logger import LoggerConfig
 
 URL = "https://ploum.net/2026-09-02-i_dont_have_a_smartphone.html"
+
+LOGGER = LoggerConfig().logger
 
 
 def session_selector(session_path: str) -> str | None:
@@ -37,7 +40,7 @@ def session_selector(session_path: str) -> str | None:
         elif int(user_input) in range(1, len(session_files) + 1):
             return session_files[int(user_input) - 1]
     except ValueError as e:
-        print(f"\n\nAn error occurred while trying to list prior sessions: {e}")
+        LOGGER.error(f"\n\nAn error occurred while trying to list prior sessions: {e}")
         return None  # consider as new session
 
 
@@ -106,7 +109,7 @@ def main() -> None:
             print("=" * 50)
             print("\n\n")
     except (ValueError, TypeError, RuntimeError) as e:
-        print(f"\n\nAn error occurred : {e}")
+        LOGGER.error(f"\n\nAn error occurred : {e}")
         if conversation is not None and conversation.is_session_available():
             print("\nSaving available session.")
             conversation.persist()
