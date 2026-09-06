@@ -9,6 +9,14 @@ from google.genai.interactions import Interaction
 
 from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
 
+# Setup to handle GenAiError but fallback to broad Exception if google-genai
+# makes breaking changes. Could be possible since its imported from privately
+# scoped _gaos
+try:
+    from google.genai._gaos.errors import GenAiError
+except ImportError:
+    GenAiError = Exception
+
 
 class Conversation:
     """
@@ -64,8 +72,6 @@ class Conversation:
 
         Returns:
             Interaction | None : The created interaction or None.
-        Raises:
-            TypeError : Expected response to be non-streaming type.
         """
         try:
             interaction = self.client.interactions.create(
@@ -81,11 +87,17 @@ class Conversation:
                 stream=False,
             )
             if not isinstance(interaction, Interaction):
-                raise TypeError("Expected a non-streaming response")
+                print("\nExpected a non-streaming response")
+                return None
             return interaction
-        except FileNotFoundError as e:
+        except RuntimeError as e:
             print(
                 f"\n\nAn error occurred while loading system instruction prompt file : {e}"
+            )
+            return None
+        except GenAiError as e:
+            print(
+                f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
             )
             return None
 
@@ -177,13 +189,9 @@ class Conversation:
             interaction token usage.
         Raises:
             ValueError: If the interaction could not be created.
-            TypeError: If the created interaction is not a non-streaming response.
         """
         self._add_to_history(question)
-        try:
-            interaction = self._create_interaction()
-        except TypeError as e:
-            raise TypeError(f"{e}")
+        interaction = self._create_interaction()
         if interaction is None:
             self._remove_most_recent_from_history()
             self.previous_interaction_id = None
@@ -241,6 +249,15 @@ class Conversation:
         self.history = prior_session_data["history"]
         self.previous_interaction_id = prior_session_data["previous_interaction_id"]
         self.total_tokens = prior_session_data["total_tokens"]
+
+    def is_session_available(self) -> bool:
+        """
+        Returns if the current session's conversation is available or not.
+
+        Returns:
+            bool : If the current session's conversation is available or not.
+        """
+        return self.history is not None and len(self.history) > 0
 
     def close(self):
         """

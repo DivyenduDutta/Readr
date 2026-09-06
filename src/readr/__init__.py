@@ -55,6 +55,7 @@ def main() -> None:
     # page = fetch_url(URL)
     # text = extract(page)
 
+    conversation = None
     try:
         config = load_config("readr.yml")
         selected_session_file = session_selector(config["session"]["base_path"])
@@ -104,11 +105,11 @@ def main() -> None:
             print(f"Overall Total tokens: {total_tokens['total']}")
             print("=" * 50)
             print("\n\n")
-    except FileNotFoundError as e:
-        print(f"\n\nAn error occurred while loading config file : {e}")
-    except (ValueError, TypeError) as e:
+    except (ValueError, TypeError, RuntimeError) as e:
         print(f"\n\nAn error occurred : {e}")
-    except RuntimeError as e:
-        print(f"\n\nAn error occurred : {e}")
+        if conversation is not None and conversation.is_session_available():
+            print("\nSaving available session.")
+            conversation.persist()
     finally:
-        conversation.close()
+        if conversation:
+            conversation.close()

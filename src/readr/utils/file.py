@@ -19,7 +19,7 @@ def retrieve_file_contents(
     Returns:
        str | dict[str, Any] : The contents of the file.
     Raises:
-        FileNotFoundError: If no file exists at relative_path.
+        RuntimeError : If no file exists at relative_path.
     """
     try:
         file_path = Path(os.getcwd() + relative_path)
@@ -28,8 +28,8 @@ def retrieve_file_contents(
                 return file.read()
             else:
                 return json.load(file)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"The file at {relative_path} was not found.")
+    except FileNotFoundError as e:
+        raise RuntimeError(f"The file at {relative_path} was not found.") from e
 
 
 def save_file_contents(relative_path: str, content: dict[str, Any]) -> None:
@@ -61,12 +61,16 @@ def load_config(file_name: str) -> dict[str, Any]:
     Returns:
         dict[str, Any]: The configuration content.
     Raises:
-        FileNotFoundError: If no config file exists with the given name under
+        RuntimeError : If no config file exists with the given name under
                            src/res/configs/.
     """
     try:
         file_path = Path(os.getcwd()) / "src" / "res" / "configs" / file_name
         with open(file_path, "r", encoding="utf-8") as file:
             return yaml.load(file, Loader=yaml.FullLoader)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"The configuration file at {file_name} was not found.")
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"The configuration file at {file_name} was not found."
+        ) from e
+    except yaml.YAMLError as e:
+        raise RuntimeError(f"The configuration file at {file_name} is malformed") from e
