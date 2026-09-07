@@ -35,7 +35,7 @@ jobs:
       - name: Activate the virtual environment
         shell: bash -l {0}
         run: |
-          .venv/scripts/activate
+          .venv/bin/activate
 
       - name: Run pre-commit (linting/formatting/type checking)
         shell: bash -l {0}
