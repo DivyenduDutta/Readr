@@ -4,8 +4,6 @@ from readr.model.Conversation import Conversation
 from readr.utils.file import load_config, retrieve_file_contents
 from readr.utils.logger import LoggerConfig
 
-URL = "https://ploum.net/2026-09-02-i_dont_have_a_smartphone.html"
-
 LOGGER = LoggerConfig().logger
 
 
@@ -55,9 +53,6 @@ def main() -> None:
     Errors from config loading, session reload, or the conversation loop are caught
     and printed rather than propagated.
     """
-    # page = fetch_url(URL)
-    # text = extract(page)
-
     conversation = None
     try:
         config = load_config("readr.yml")
