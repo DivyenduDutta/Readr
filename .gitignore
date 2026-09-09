@@ -15,3 +15,6 @@ wheels/
 
 # Ignore sample sessions
 src/res/sessions/*.json
+
+# Ignore log files
+src/logs
