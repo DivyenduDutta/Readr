@@ -40,8 +40,8 @@ Lorem Ipsum
 
 ### Sanity
 
-Before committing changes run `uv run pre-commit run --all-files` or `pre-commit run --file <file1>, <file2> ...`
+Before committing changes run `uv run pre-commit run --all-files` or `uv run pre-commit run --file <file1>, <file2> ...`
 
 ### Run Readr
 
-`uv run Readr`
+`uv run readr`
