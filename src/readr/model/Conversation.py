@@ -12,13 +12,28 @@ from google.genai.interactions import Interaction
 from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
 from readr.utils.logger import LoggerConfig
 
-# Setup to handle GenAiError but fallback to broad Exception if google-genai
-# makes breaking changes. Could be possible since its imported from privately
-# scoped _gaos
+# Setup to handle GenAiError, CreateInteractionClientError but fallback to broad
+# Exception if google-genai makes breaking changes. Could be possible since its imported
+# from privately scoped _gaos
 try:
     from google.genai._gaos.errors import GenAiError
 except ImportError:
     GenAiError = Exception
+
+try:
+    from google.genai._gaos.errors.createinteraction import CreateInteractionClientError
+except ImportError:
+    CreateInteractionClientError = Exception
+
+try:
+    from google.genai._gaos.lib.compat_errors import BadRequestError
+except ImportError:
+    BadRequestError = Exception
+
+try:
+    from google.genai._gaos.lib.compat_errors import RateLimitError
+except ImportError:
+    RateLimitError = Exception
 
 LOGGER = LoggerConfig().logger
 
@@ -102,9 +117,19 @@ class Conversation:
                 f"\n\nAn error occurred while loading system instruction prompt file : {e}"
             )
             return None
-        except GenAiError as e:
+        except (GenAiError, CreateInteractionClientError) as e:
             LOGGER.error(
                 f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
+            )
+            return None
+        except BadRequestError as e:
+            LOGGER.error(
+                f"\n\nAn error occurred due to some issue in the request to the LLM : {e}"
+            )
+            return None
+        except RateLimitError as e:
+            LOGGER.error(
+                f"\n\nAn error occurred due to surpassing LLM usage limit : {e}"
             )
             return None
 
