@@ -278,6 +278,20 @@ class Conversation:
         self.tools = []
         LOGGER.info(f"The current tool list is {self.tools}")
 
+    def _setup_tool_capability(self, question: str):
+        """
+        Builds the tool list necessary to handle the user prompt/question.
+
+        Args:
+            question (str): The user prompt to handle.
+        """
+        url = self._determine_url_presence(question)
+        intent = None
+        if url:
+            LOGGER.info(f"Determined url : {url} from user prompt")
+            intent = self._determine_url_intent(question, url)
+        self._build_tools_list(intent)
+
     def ask(self, question: str) -> tuple[str, dict[str, int], dict[str, int]]:
         """
         Asks a question to the model and returns the response.
@@ -300,12 +314,7 @@ class Conversation:
             ValueError: If the interaction could not be created.
         """
         self._add_to_history(question)
-        url = self._determine_url_presence(question)
-        intent = None
-        if url:
-            LOGGER.info(f"Determined url : {url} from user prompt")
-            intent = self._determine_url_intent(question, url)
-        self._build_tools_list(intent)
+        self._setup_tool_capability(question)
         interaction = self._create_interaction()
         if interaction is None:
             self._remove_most_recent_from_history()
