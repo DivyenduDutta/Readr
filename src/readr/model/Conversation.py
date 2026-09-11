@@ -1,5 +1,7 @@
+import json
 import os
 import re
+from json import JSONDecodeError
 from typing import Any
 from uuid import uuid4 as uuid
 
@@ -42,6 +44,7 @@ class Conversation:
         load_dotenv()
         self.client = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
         self.config = load_config("readr.yml")
+        self.tools = []  # tools to be used by the LLM to fulful user request
 
         # this is used to keep track of the previous interaction id for getting back the
         # token usage in that interaction
@@ -88,6 +91,7 @@ class Conversation:
                 if self.previous_interaction_id
                 else None,
                 stream=False,
+                tools=self.tools,
             )
             if not isinstance(interaction, Interaction):
                 LOGGER.error("\nExpected a non-streaming response")
@@ -172,6 +176,78 @@ class Conversation:
             title = match.group(1)
         return title
 
+    def _determine_url_presence(self, question: str) -> str | None:
+        pattern = r"https?://[^\s)]+"
+        match = re.search(pattern, question)
+        url = match.group(0) if match else None
+        return url
+
+    def _determine_url_intent(self, question: str, url: str) -> dict[str, Any] | None:
+        """
+        Sample input prompt:
+
+        Message:
+        Hey can you help me understand the keypoints in
+        "<url>"
+
+        Extracted URLs:
+        - <url>
+
+        Sample response:
+        {"use_url":true,"url":"https://...","reason":"User wants the webpage summarized."}
+        """
+        input_prompt = f"Message:\n{question} \n\nExtracted URLs:\n- {url}"
+        try:
+            interaction = self.client.interactions.create(
+                model=self.model_name,
+                store=False,  # opt out of server side storage
+                system_instruction=retrieve_file_contents(
+                    self.config["model"]["decide_url_usage_intent_prompt"]
+                ),
+                input=input_prompt,
+                stream=False,
+            )
+            if not isinstance(interaction, Interaction):
+                LOGGER.error("\nExpected a non-streaming response")
+                return None
+            if interaction.output_text is None:
+                LOGGER.error(
+                    "Interaction response was none during url intent determination"
+                )
+                return None
+
+            match = re.search(
+                r"```(?:json)?\s*(.*?)\s*```", interaction.output_text, re.DOTALL
+            )
+
+            intent = None
+            if match:
+                try:
+                    intent = json.loads(match.group(1))
+                except JSONDecodeError:
+                    LOGGER.error(
+                        "Error while decoding json response from LLM regarding url intent"
+                    )
+            return intent
+        except RuntimeError as e:
+            LOGGER.error(
+                f"\n\nAn error occurred while loading url usage intent prompt file : {e}"
+            )
+            return None
+        except GenAiError as e:
+            LOGGER.error(
+                f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
+            )
+            return None
+
+    def _build_tools_list(self, intent: dict[str, Any] | None):
+        LOGGER.info(f"The url intent is {intent}")
+        if intent and intent["use_url"]:
+            if "url_context" not in intent.values():
+                self.tools.append({"type": "url_context"})
+            return
+        self.tools = []
+
     def ask(self, question: str) -> tuple[str, dict[str, int], dict[str, int]]:
         """
         Asks a question to the model and returns the response.
@@ -194,6 +270,13 @@ class Conversation:
             ValueError: If the interaction could not be created.
         """
         self._add_to_history(question)
+        url = self._determine_url_presence(question)
+        intent = None
+        if url:
+            LOGGER.info(f"Determined url : {url} from user prompt")
+            intent = self._determine_url_intent(question, url)
+        self._build_tools_list(intent)
+        LOGGER.info(f"The current tool list is {self.tools}")
         interaction = self._create_interaction()
         if interaction is None:
             self._remove_most_recent_from_history()
