@@ -177,6 +177,16 @@ class Conversation:
         return title
 
     def _determine_url_presence(self, question: str) -> str | None:
+        """
+        Extracts url from the user prompt.
+
+        Args:
+            question (str): The user prompt.
+
+        Returns
+            str | None: The extracted url from the user prompt if present or None if no url
+                        present in the user prompt.
+        """
         pattern = r"https?://[^\s)]+"
         match = re.search(pattern, question)
         url = match.group(0) if match else None
@@ -184,6 +194,10 @@ class Conversation:
 
     def _determine_url_intent(self, question: str, url: str) -> dict[str, Any] | None:
         """
+        Determines the intent of the url in the user prompt. Invokes an LLM to determine this.
+        Below is the sample input prompt to the LLM for this task and the sample output from
+        the LLM.
+
         Sample input prompt:
 
         Message:
@@ -195,6 +209,14 @@ class Conversation:
 
         Sample response:
         {"use_url":true,"url":"https://...","reason":"User wants the webpage summarized."}
+
+        Args:
+            question (str): The user prompt.
+            url (str): The url extracted from the user prompt.
+
+        Returns:
+            dict[str, Any] | None: The url intent response from the LLM. See above for
+                                   sample response or None in case of errors.
         """
         input_prompt = f"Message:\n{question} \n\nExtracted URLs:\n- {url}"
         try:
@@ -241,6 +263,13 @@ class Conversation:
             return None
 
     def _build_tools_list(self, intent: dict[str, Any] | None):
+        """
+        Builds the tool list to be sent to the Google Gen AI SDK.
+
+        Args:
+            intent (dict[str, Any] | None): The url intent as determined by the LLM from the user
+                                     prompt.
+        """
         LOGGER.info(f"The url intent is {intent}")
         if intent and intent["use_url"]:
             if "url_context" not in intent.values():
