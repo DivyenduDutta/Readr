@@ -106,8 +106,9 @@ def main() -> None:
     except (ValueError, TypeError, RuntimeError) as e:
         LOGGER.error(f"\n\nAn error occurred : {e}")
         if conversation is not None and conversation.is_session_available():
-            print("\nSaving available session.")
+            print("\nOops! Something went wrong! Saving available session.")
             conversation.persist()
+        print("\nOops! Something went wrong!")
     finally:
         if conversation:
             conversation.close()
