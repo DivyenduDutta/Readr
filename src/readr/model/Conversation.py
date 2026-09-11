@@ -247,6 +247,7 @@ class Conversation:
                 self.tools.append({"type": "url_context"})
             return
         self.tools = []
+        LOGGER.info(f"The current tool list is {self.tools}")
 
     def ask(self, question: str) -> tuple[str, dict[str, int], dict[str, int]]:
         """
@@ -276,7 +277,6 @@ class Conversation:
             LOGGER.info(f"Determined url : {url} from user prompt")
             intent = self._determine_url_intent(question, url)
         self._build_tools_list(intent)
-        LOGGER.info(f"The current tool list is {self.tools}")
         interaction = self._create_interaction()
         if interaction is None:
             self._remove_most_recent_from_history()
