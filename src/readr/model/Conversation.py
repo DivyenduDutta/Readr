@@ -45,15 +45,17 @@ class Conversation:
     provides methods to ask questions and retrieve responses.
     """
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, enable_google_search_grounding: bool):
         """
         Initializes a Conversation instance.
 
         Args:
             model_name (str): The name of the model to use for the conversation.
+            enable_google_search_grouding (bool) : Whether google search tool is enabled or not.
         """
         self.id = uuid().hex
         self.model_name = model_name
+        self.enable_google_search_grounding = enable_google_search_grounding
         self.title = None
         self.history = []
         load_dotenv()
@@ -302,12 +304,16 @@ class Conversation:
             intent (dict[str, Any] | None): The url intent as determined by the LLM from the user
                                      prompt.
         """
-        LOGGER.info(f"The url intent is {intent}")
-        if intent and intent["use_url"]:
-            if "url_context" not in intent.values():
-                self.tools.append({"type": "url_context"})
-            return
         self.tools = []
+        LOGGER.info(f"The url intent is {intent}")
+
+        if intent and intent["use_url"]:
+            self.tools.append({"type": "url_context"})
+
+        if self.enable_google_search_grounding:
+            print("\n[NOTE]: Google Search Grounding is enabled for this request")
+            self.tools.append({"type": "google_search"})
+
         LOGGER.info(f"The current tool list is {self.tools}")
 
     def _setup_tool_capability(self, question: str):
@@ -324,12 +330,53 @@ class Conversation:
             intent = self._determine_url_intent(question, url)
         self._build_tools_list(intent)
 
-    def ask(self, question: str) -> tuple[str, dict[str, int], dict[str, int]]:
+    def _retrieve_citations(
+        self, interaction: Interaction | None
+    ) -> dict[str, dict[str, str]]:
+        """
+        Retrieves the citations from the LLM response. Only possible if the built in
+        tool : `google_search` is used.
+
+        Args:
+            interaction (Interaction | None) : The interaction from which to retrieve the citations.
+
+        Returns:
+            dict[str, dict[str, str]] : The citations associated with the google search performed by the LLM.
+        """
+        citations = {}
+
+        if interaction and interaction.steps and len(interaction.steps) > 0:
+            for step in interaction.steps:
+                if (
+                    step.type == "model_output"
+                    and step.content
+                    and len(step.content) > 0
+                ):
+                    for content_block in step.content:
+                        if content_block.type == "text" and content_block.annotations:
+                            for annotation in content_block.annotations:
+                                if (
+                                    annotation.type == "url_citation"
+                                    and annotation.title
+                                    and annotation.url
+                                ):
+                                    cited_text = content_block.text[
+                                        annotation.start_index : annotation.end_index
+                                    ]
+                                    citations[annotation.title]["url"] = annotation.url
+                                    citations[annotation.title]["cited_text"] = (
+                                        cited_text
+                                    )
+        return citations
+
+    def ask(
+        self, question: str
+    ) -> tuple[str, dict[str, dict[str, str]], dict[str, int], dict[str, int]]:
         """
         Asks a question to the model and returns the response.
 
         1. Adds the question to the conversation history.
-        2. Creates an interaction with the model.
+        2. Creates an interaction with the model (adding appropriate tools)
         3. If the interaction is successful, retrieves the model's response, extracts a title, saves
            the interaction steps to history, and records the token usage.
         4. If the interaction fails, removes the most recent question from the history and raises a
@@ -339,8 +386,8 @@ class Conversation:
         Args:
             question (str): The question to ask the model.
         Returns:
-            Tuple[str, Dict[str, int], Dict[str, int]]: A tuple containing the model's response,
-                                                        total token usage, and current
+            Tuple[str, dict[str, dict[str, str]], dict[str, int], dict[str, int]]: A tuple containing the model's response,
+                                                        citations, total token usage, and current
             interaction token usage.
         Raises:
             ValueError: If the interaction could not be created.
@@ -353,6 +400,7 @@ class Conversation:
             self.previous_interaction_id = None
             raise ValueError("Error: Interaction could not be created")
 
+        citations = self._retrieve_citations(interaction)
         response = interaction.output_text or "Sorry, what was that again?"
 
         self.title = (
@@ -363,7 +411,7 @@ class Conversation:
         self._save_interaction_steps(interaction)
         self._record_usage_tokens(interaction)
         self.previous_interaction_id = interaction.id
-        return response, self.total_tokens, self.current_interaction_tokens
+        return response, citations, self.total_tokens, self.current_interaction_tokens
 
     def persist(self):
         """

@@ -66,7 +66,10 @@ def main() -> None:
                 selected_session_path, is_json=True
             )
 
-        conversation = Conversation(model_name=config["model"]["name"])
+        conversation = Conversation(
+            model_name=config["model"]["name"],
+            enable_google_search_grounding=config["model"]["google_search_grounding"],
+        )
 
         # reload prior session data into current conversation
         if prior_session_data:
@@ -83,11 +86,16 @@ def main() -> None:
             if user_input.lower() == "/quit":
                 conversation.persist()
                 break
-            response, total_tokens, current_interaction_tokens = conversation.ask(
-                user_input
+            response, citations, total_tokens, current_interaction_tokens = (
+                conversation.ask(user_input)
             )
             print(f"\n\n Question: {user_input}\n\n Response: {response}")
             print("\n")
+            if len(citations) > 0:
+                print("\nCitations")
+                for citation_title, citation_content in citations.items():
+                    print(f"    [{citation_title}({citation_content['url']})]")
+                    print(f'    Cited text: "{citation_content["cited_text"]}"')
             print(
                 f"Current interaction input tokens: {current_interaction_tokens['input']}"
             )
