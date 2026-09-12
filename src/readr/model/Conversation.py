@@ -163,7 +163,14 @@ class Conversation:
         output_tokens = interaction.usage.total_output_tokens
         total_tokens = interaction.usage.total_tokens
 
-        if input_tokens is None or output_tokens is None or total_tokens is None:
+        if (
+            input_tokens is None
+            or input_tokens == 0
+            or output_tokens is None
+            or output_tokens == 0
+            or total_tokens is None
+            or total_tokens == 0
+        ):
             print(
                 "Incomplete token usage for this interaction. Will hold prior values."
             )
