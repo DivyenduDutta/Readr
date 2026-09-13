@@ -397,9 +397,14 @@ class Conversation:
 
         if interaction.steps:
             fc_step = next(s for s in interaction.steps if s.type == "function_call")
-            if fc_step.name == ToolNames.ARTICLE_FETCHER:
+            if fc_step.name == ToolNames.ARTICLE_FETCHER.value:
                 article_fetcher = ArticleFetcherTool()
                 result = article_fetcher.execute(**fc_step.arguments)
+
+                if result and len(result) > 0:
+                    LOGGER.info(
+                        f"Custom article fetcher has retrieved the contents of the article. Size : {len(result)}"
+                    )
 
                 self.history.append(
                     {
