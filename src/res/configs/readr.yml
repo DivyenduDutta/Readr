@@ -3,5 +3,6 @@ model :
   system_instruction_prompt : "/src/res/system_instruction_prompt.md"
   decide_url_usage_intent_prompt : "/src/res/decide_url_usage_intent_prompt.md"
   google_search_grounding : True
+  custom_url_content_fetch : True
 session :
   base_path : "/src/res/sessions/" # its a folder so end with /
