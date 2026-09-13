@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai.interactions import Interaction
 
+from readr.constants.tool_constants import ToolNames
+from readr.tools.ArticleFetcherTool import ArticleFetcherTool
 from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
 from readr.utils.logger import LoggerConfig
 
@@ -45,17 +47,24 @@ class Conversation:
     provides methods to ask questions and retrieve responses.
     """
 
-    def __init__(self, model_name: str, enable_google_search_grounding: bool):
+    def __init__(
+        self,
+        model_name: str,
+        enable_google_search_grounding: bool,
+        custom_url_content_fetch: bool,
+    ):
         """
         Initializes a Conversation instance.
 
         Args:
             model_name (str): The name of the model to use for the conversation.
             enable_google_search_grouding (bool) : Whether google search tool is enabled or not.
+            custom_url_content_fetch (bool) : Whether to use url content fetch tool calling capability or not.
         """
         self.id = uuid().hex
         self.model_name = model_name
         self.enable_google_search_grounding = enable_google_search_grounding
+        self.custom_url_content_fetch = custom_url_content_fetch
         self.title = None
         self.history = []
         load_dotenv()
@@ -308,7 +317,15 @@ class Conversation:
         LOGGER.info(f"The url intent is {intent}")
 
         if intent and intent["use_url"]:
-            self.tools.append({"type": "url_context"})
+            if self.custom_url_content_fetch:
+                tool_desc = ArticleFetcherTool.get_tool_description()
+                print(f"\n[NOTE]: {tool_desc['name']} is enabled for this request")
+                self.tools.append(tool_desc)
+            else:
+                print(
+                    "\n[NOTE]: 'url_context' inbuilt tool is enabled for this request"
+                )
+                self.tools.append({"type": "url_context"})
 
         if self.enable_google_search_grounding:
             print("\n[NOTE]: Google Search Grounding is enabled for this request")
@@ -369,6 +386,38 @@ class Conversation:
                                     )
         return citations
 
+    def _handle_custom_tool_call_functionality(
+        self, interaction: Interaction
+    ) -> Interaction | None:
+        self._save_interaction_steps(interaction)
+        self._record_usage_tokens(interaction)
+        self.previous_interaction_id = interaction.id
+
+        current_interaction = None
+
+        if interaction.steps:
+            fc_step = next(s for s in interaction.steps if s.type == "function_call")
+            if fc_step.name == ToolNames.ARTICLE_FETCHER:
+                article_fetcher = ArticleFetcherTool()
+                result = article_fetcher.execute(**fc_step.arguments)
+
+                self.history.append(
+                    {
+                        "type": "function_result",
+                        "name": fc_step.name,
+                        "call_id": fc_step.id,
+                        "result": [{"type": "text", "text": json.dumps(result)}],
+                    }
+                )
+                current_interaction = self._create_interaction()
+        return current_interaction
+
+    def _is_custom_tool_call_required(self) -> bool:
+        for tool in self.tools:
+            if tool["type"] == "function":
+                return True
+        return False
+
     def ask(
         self, question: str
     ) -> tuple[str, dict[str, dict[str, str]], dict[str, int], dict[str, int]]:
@@ -397,8 +446,14 @@ class Conversation:
         interaction = self._create_interaction()
         if interaction is None:
             self._remove_most_recent_from_history()
-            self.previous_interaction_id = None
-            raise ValueError("Error: Interaction could not be created")
+            raise ValueError("Error 1: Interaction could not be created")
+
+        is_custom_tool_call_required = self._is_custom_tool_call_required()
+        if is_custom_tool_call_required:
+            interaction = self._handle_custom_tool_call_functionality(interaction)
+            if interaction is None:
+                self._remove_most_recent_from_history()
+                raise ValueError("Error 2: Interaction could not be created")
 
         citations = self._retrieve_citations(interaction)
         response = interaction.output_text or "Sorry, what was that again?"
