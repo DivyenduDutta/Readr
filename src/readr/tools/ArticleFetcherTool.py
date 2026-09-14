@@ -16,6 +16,16 @@ class ArticleFetcherTool(metaclass=SingletonMeta):
         self.article_content = None
 
     def execute(self, url: str) -> str:
+        """
+        The main logic of the article fetcher tool. Uses Trafilatura to fetch the online article
+        and extracts the text from it.
+
+        Args:
+            url (str): The url of the online article whose contents need to be fetched.
+
+        Returns:
+            str: The contents of the online article.
+        """
         if self.url == url:
             return self.article_content if self.article_content is not None else ""
         self.url = url
@@ -25,6 +35,12 @@ class ArticleFetcherTool(metaclass=SingletonMeta):
 
     @staticmethod
     def get_tool_description() -> dict[str, Any]:
+        """
+        Returns the description of the article fetcher tool. To be used by the LLM.
+
+        Returns:
+            dict[str, Any] : The tool description.
+        """
         tool_desc = {
             "type": "function",
             "name": f"{ToolNames.ARTICLE_FETCHER.value}",

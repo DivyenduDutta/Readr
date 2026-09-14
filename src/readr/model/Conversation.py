@@ -389,6 +389,18 @@ class Conversation:
     def _handle_custom_tool_call_functionality(
         self, interaction: Interaction
     ) -> Interaction | None:
+        """
+        Handles the behavior of custom tool call functionality.
+        1. Checks for the suggested tool to use by the LLM.
+        2. Invokes the apppropriate tool with arguments.
+        3. Adds the result of the tool call to history (to be fed to the model again).
+
+        Args:
+            interaction (Interaction): The prior interaction instance (in which the LLM suggested which tool to use based on the prompt).
+
+        Returns:
+            Interaction | None: The new interaction instance (where the model can use the result of tool to answer the original user promopt).
+        """
         self._save_interaction_steps(interaction)
         self._record_usage_tokens(interaction)
         self.previous_interaction_id = interaction.id
@@ -418,6 +430,12 @@ class Conversation:
         return current_interaction
 
     def _is_custom_tool_call_required(self) -> bool:
+        """
+        Determines if custom tool call is being done or not.
+
+        Returns:
+            bool: Whether custom tool call is being done or not.
+        """
         for tool in self.tools:
             if tool["type"] == "function":
                 return True
