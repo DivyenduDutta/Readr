@@ -2,7 +2,7 @@ from enum import Enum
 
 
 class ToolNames(Enum):
-    ARTICLE_FETCHER = "Article Fetcher"
+    ARTICLE_FETCHER = "article_fetcher"
 
 
 class ToolDescriptions(Enum):

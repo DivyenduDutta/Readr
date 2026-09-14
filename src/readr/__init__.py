@@ -69,6 +69,7 @@ def main() -> None:
         conversation = Conversation(
             model_name=config["model"]["name"],
             enable_google_search_grounding=config["model"]["google_search_grounding"],
+            custom_url_content_fetch=config["model"]["custom_url_content_fetch"],
         )
 
         # reload prior session data into current conversation

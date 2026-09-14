@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"      # Run every Monday
+      time: "09:00"      # Run at 9:00 AM UTC
+      timezone: "Asia/Kolkata"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+    # Limit open PRs to prevent overwhelming your CI/CD pipeline
+    open-pull-requests-limit: 8
+
+    # Automatically assign reviewers and labels to the created PRs
+    reviewers:
+      - "DivyenduDutta"
+    labels:
+      - "dependencies"
+      - "python"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
