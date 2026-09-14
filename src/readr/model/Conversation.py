@@ -386,6 +386,17 @@ class Conversation:
                                     )
         return citations
 
+    def _handle_interaction_exit(self, interaction: Interaction):
+        """
+        Handles what needs to happen last wrt an interaction.
+
+        Args:
+            interaction (Interaction): The interaction to handle.
+        """
+        self._save_interaction_steps(interaction)
+        self._record_usage_tokens(interaction)
+        self.previous_interaction_id = interaction.id
+
     def _handle_custom_tool_call_functionality(
         self, interaction: Interaction
     ) -> Interaction | None:
@@ -401,9 +412,7 @@ class Conversation:
         Returns:
             Interaction | None: The new interaction instance (where the model can use the result of tool to answer the original user promopt).
         """
-        self._save_interaction_steps(interaction)
-        self._record_usage_tokens(interaction)
-        self.previous_interaction_id = interaction.id
+        self._handle_interaction_exit(interaction)
 
         current_interaction = None
 
@@ -486,9 +495,7 @@ class Conversation:
             if self.title is None
             else self.title
         )
-        self._save_interaction_steps(interaction)
-        self._record_usage_tokens(interaction)
-        self.previous_interaction_id = interaction.id
+        self._handle_interaction_exit(interaction)
         return response, citations, self.total_tokens, self.current_interaction_tokens
 
     def persist(self):
