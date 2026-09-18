@@ -377,6 +377,7 @@ class Conversation:
                                     and annotation.title
                                     and annotation.url
                                 ):
+                                    citations[annotation.title] = {}
                                     cited_text = content_block.text[
                                         annotation.start_index : annotation.end_index
                                     ]
