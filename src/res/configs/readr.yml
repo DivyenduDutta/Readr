@@ -1,5 +1,5 @@
 model :
-  name : "gemini-3.5-flash"
+  name : "gemini-3.8-flash"
   system_instruction_prompt : "/src/res/system_instruction_prompt.md"
   decide_url_usage_intent_prompt : "/src/res/decide_url_usage_intent_prompt.md"
   google_search_grounding : False # might wanna keep this disabled, eats up usage real quick
