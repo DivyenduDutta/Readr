@@ -1,43 +1,23 @@
 import json
-import os
 import re
 from json import JSONDecodeError
 from typing import Any
 from uuid import uuid4 as uuid
 
-from dotenv import load_dotenv
-from google import genai
 from google.genai.interactions import Interaction
 
 from readr.constants.tool_constants import ToolNames
+from readr.core.GeminiClient import GeminiClient
 from readr.tools.ArticleFetcherTool import ArticleFetcherTool
-from readr.utils.file import load_config, retrieve_file_contents, save_file_contents
+from readr.utils.file import load_config, save_file_contents
 from readr.utils.logger import LoggerConfig
 
-# Setup to handle GenAiError, CreateInteractionClientError but fallback to broad
-# Exception if google-genai makes breaking changes. Could be possible since its imported
-# from privately scoped _gaos
-try:
-    from google.genai._gaos.errors import GenAiError
-except ImportError:
-    GenAiError = Exception
-
-try:
-    from google.genai._gaos.errors.createinteraction import CreateInteractionClientError
-except ImportError:
-    CreateInteractionClientError = Exception
-
-try:
-    from google.genai._gaos.lib.compat_errors import BadRequestError
-except ImportError:
-    BadRequestError = Exception
-
-try:
-    from google.genai._gaos.lib.compat_errors import RateLimitError
-except ImportError:
-    RateLimitError = Exception
-
 LOGGER = LoggerConfig().logger
+
+# Token counts keyed by "input", "output" and "total".
+type TokenUsage = dict[str, int]
+# Citation details keyed by citation title; each value has "url" and "cited_text".
+type Citations = dict[str, dict[str, str]]
 
 
 class Conversation:
@@ -45,6 +25,17 @@ class Conversation:
     A class to manage a conversation with the Google Gemini API.
     Maintains a history of user inputs and model responses, and
     provides methods to ask questions and retrieve responses.
+
+    Attributes:
+        id (str): Unique id of this conversation (used when persisting it).
+        model_name (str): The name of the model used for the conversation.
+        title (str | None): The conversation title, taken from the first model response.
+        history (list[dict[str, Any]]): User inputs, model steps and tool results sent
+                                        back to the model as the conversation input.
+        tools (list[dict[str, Any]]): The tool declarations sent with the current request.
+        previous_interaction_id (str | None): Id of the last successful interaction.
+        total_tokens (TokenUsage): Cumulative token usage for the whole conversation.
+        current_interaction_tokens (TokenUsage): Token usage of the latest interaction.
     """
 
     def __init__(
@@ -52,35 +43,39 @@ class Conversation:
         model_name: str,
         enable_google_search_grounding: bool,
         custom_url_content_fetch: bool,
-    ):
+    ) -> None:
         """
         Initializes a Conversation instance.
 
         Args:
             model_name (str): The name of the model to use for the conversation.
-            enable_google_search_grouding (bool) : Whether google search tool is enabled or not.
+            enable_google_search_grounding (bool) : Whether google search tool is enabled or not.
             custom_url_content_fetch (bool) : Whether to use url content fetch tool calling capability or not.
         """
-        self.id = uuid().hex
-        self.model_name = model_name
+        self.id: str = uuid().hex
+        self.model_name: str = model_name
         self.enable_google_search_grounding = enable_google_search_grounding
         self.custom_url_content_fetch = custom_url_content_fetch
-        self.title = None
-        self.history = []
-        load_dotenv()
-        self.client = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
+        self.title: str | None = None
+        self.client = GeminiClient()
+        self.history: list[dict[str, Any]] = []
         self.config = load_config("readr.yml")
-        self.tools = []  # tools to be used by the LLM to fulful user request
+        # tools to be used by the LLM to fulfil the user request
+        self.tools: list[dict[str, Any]] = []
 
         # this is used to keep track of the previous interaction id for getting back the
         # token usage in that interaction
-        self.previous_interaction_id = None
+        self.previous_interaction_id: str | None = None
 
-        self.total_tokens = {"input": 0, "output": 0, "total": 0}
+        self.total_tokens: TokenUsage = {"input": 0, "output": 0, "total": 0}
 
-        self.current_interaction_tokens = {"input": 0, "output": 0, "total": 0}
+        self.current_interaction_tokens: TokenUsage = {
+            "input": 0,
+            "output": 0,
+            "total": 0,
+        }
 
-    def _add_to_history(self, question: str):
+    def _add_to_history(self, question: str) -> None:
         """
         Adds a user input to the conversation history.
 
@@ -91,60 +86,15 @@ class Conversation:
             {"type": "user_input", "content": [{"type": "text", "text": f"{question}"}]}
         )
 
-    def _remove_most_recent_from_history(self):
+    def _remove_most_recent_from_history(self) -> None:
         """
         Removes the most recent entry from the conversation history.
+        Does nothing if the history is empty.
         """
         if self.history:
             self.history.pop()
 
-    def _create_interaction(self) -> Interaction | None:
-        """
-        Creates an interaction with the Google Gemini API.
-
-        Returns:
-            Interaction | None : The created interaction or None.
-        """
-        try:
-            interaction = self.client.interactions.create(
-                model=self.model_name,
-                store=False,  # opt out of server side storage
-                system_instruction=retrieve_file_contents(
-                    self.config["model"]["system_instruction_prompt"]
-                ),
-                input=self.history,
-                previous_interaction_id=self.previous_interaction_id
-                if self.previous_interaction_id
-                else None,
-                stream=False,
-                tools=self.tools,
-            )
-            if not isinstance(interaction, Interaction):
-                LOGGER.error("\nExpected a non-streaming response")
-                return None
-            return interaction
-        except RuntimeError as e:
-            LOGGER.error(
-                f"\n\nAn error occurred while loading system instruction prompt file : {e}"
-            )
-            return None
-        except (GenAiError, CreateInteractionClientError) as e:
-            LOGGER.error(
-                f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
-            )
-            return None
-        except BadRequestError as e:
-            LOGGER.error(
-                f"\n\nAn error occurred due to some issue in the request to the LLM : {e}"
-            )
-            return None
-        except RateLimitError as e:
-            LOGGER.error(
-                f"\n\nAn error occurred due to surpassing LLM usage limit : {e}"
-            )
-            return None
-
-    def _save_interaction_steps(self, interaction: Interaction):
+    def _save_interaction_steps(self, interaction: Interaction) -> None:
         """
         Saves the steps of an interaction to the conversation history.
 
@@ -156,9 +106,12 @@ class Conversation:
             for step in interaction.steps:
                 self.history.append(step.model_dump())
 
-    def _record_usage_tokens(self, interaction: Interaction):
+    def _record_usage_tokens(self, interaction: Interaction) -> None:
         """
         Record token usage for the current interaction.
+
+        Updates `total_tokens` and `current_interaction_tokens`. If the interaction
+        has no usage, or any count is missing or zero, the prior values are kept.
 
         Args:
             interaction (Interaction): The interaction to record usage from. Its
@@ -226,9 +179,9 @@ class Conversation:
         Args:
             question (str): The user prompt.
 
-        Returns
-            str | None: The extracted url from the user prompt if present or None if no url
-                        present in the user prompt.
+        Returns:
+            str | None: The first url found in the user prompt, or None if the prompt
+                        contains no url.
         """
         pattern = r"https?://[^\s)]+"
         match = re.search(pattern, question)
@@ -259,59 +212,48 @@ class Conversation:
 
         Returns:
             dict[str, Any] | None: The url intent response from the LLM. See above for
-                                   sample response or None in case of errors.
+                                   sample response. None if the LLM call failed, the
+                                   response had no text, or its json block was missing
+                                   or could not be decoded.
         """
         input_prompt = f"Message:\n{question} \n\nExtracted URLs:\n- {url}"
-        try:
-            interaction = self.client.interactions.create(
-                model=self.model_name,
-                store=False,  # opt out of server side storage
-                system_instruction=retrieve_file_contents(
-                    self.config["model"]["decide_url_usage_intent_prompt"]
-                ),
-                input=input_prompt,
-                stream=False,
+
+        interaction = self.client.create_interaction_to_determine_intent(
+            model_name=self.model_name,
+            input_prompt=input_prompt,
+            system_instruction_file=self.config["model"][
+                "decide_url_usage_intent_prompt"
+            ],
+        )
+        if interaction is None or interaction.output_text is None:
+            LOGGER.error(
+                "Interaction response was none during url intent determination"
             )
-            if not isinstance(interaction, Interaction):
-                LOGGER.error("\nExpected a non-streaming response")
-                return None
-            if interaction.output_text is None:
+            return None
+
+        match = re.search(
+            r"```(?:json)?\s*(.*?)\s*```", interaction.output_text, re.DOTALL
+        )
+
+        intent = None
+        if match:
+            try:
+                intent = json.loads(match.group(1))
+            except JSONDecodeError:
                 LOGGER.error(
-                    "Interaction response was none during url intent determination"
+                    "Error while decoding json response from LLM regarding url intent"
                 )
-                return None
+        return intent
 
-            match = re.search(
-                r"```(?:json)?\s*(.*?)\s*```", interaction.output_text, re.DOTALL
-            )
-
-            intent = None
-            if match:
-                try:
-                    intent = json.loads(match.group(1))
-                except JSONDecodeError:
-                    LOGGER.error(
-                        "Error while decoding json response from LLM regarding url intent"
-                    )
-            return intent
-        except RuntimeError as e:
-            LOGGER.error(
-                f"\n\nAn error occurred while loading url usage intent prompt file : {e}"
-            )
-            return None
-        except GenAiError as e:
-            LOGGER.error(
-                f"\n\nAn error occurred while creating interaction from Google GenAI SDK : {e}"
-            )
-            return None
-
-    def _build_tools_list(self, intent: dict[str, Any] | None):
+    def _build_tools_list(self, intent: dict[str, Any] | None) -> None:
         """
         Builds the tool list to be sent to the Google Gen AI SDK.
+        Replaces `self.tools` with the tools needed for the current request.
 
         Args:
             intent (dict[str, Any] | None): The url intent as determined by the LLM from the user
-                                     prompt.
+                                            prompt. None if there was no url or the intent
+                                            could not be determined.
         """
         self.tools = []
         LOGGER.info(f"The url intent is {intent}")
@@ -333,9 +275,11 @@ class Conversation:
 
         LOGGER.info(f"The current tool list is {self.tools}")
 
-    def _setup_tool_capability(self, question: str):
+    def _setup_tool_capability(self, question: str) -> None:
         """
         Builds the tool list necessary to handle the user prompt/question.
+        Determines whether the prompt contains a url and, if so, what the user wants done
+        with it, then sets `self.tools` accordingly.
 
         Args:
             question (str): The user prompt to handle.
@@ -347,9 +291,7 @@ class Conversation:
             intent = self._determine_url_intent(question, url)
         self._build_tools_list(intent)
 
-    def _retrieve_citations(
-        self, interaction: Interaction | None
-    ) -> dict[str, dict[str, str]]:
+    def _retrieve_citations(self, interaction: Interaction | None) -> Citations:
         """
         Retrieves the citations from the LLM response. Only possible if the built in
         tool : `google_search` is used.
@@ -358,9 +300,12 @@ class Conversation:
             interaction (Interaction | None) : The interaction from which to retrieve the citations.
 
         Returns:
-            dict[str, dict[str, str]] : The citations associated with the google search performed by the LLM.
+            Citations : The citations associated with the google search performed by the LLM,
+                        keyed by citation title. Each value holds the `url` and the `cited_text`.
+                        If several citations share a title, the last one wins.
+                        Empty if there are no citations.
         """
-        citations = {}
+        citations: Citations = {}
 
         if interaction and interaction.steps and len(interaction.steps) > 0:
             for step in interaction.steps:
@@ -387,9 +332,10 @@ class Conversation:
                                     )
         return citations
 
-    def _handle_interaction_exit(self, interaction: Interaction):
+    def _handle_interaction_exit(self, interaction: Interaction) -> None:
         """
-        Handles what needs to happen last wrt an interaction.
+        Handles what needs to happen last wrt an interaction: saves its steps to the
+        history, records its token usage and remembers its id as the previous interaction.
 
         Args:
             interaction (Interaction): The interaction to handle.
@@ -403,15 +349,22 @@ class Conversation:
     ) -> Interaction | None:
         """
         Handles the behavior of custom tool call functionality.
-        1. Checks for the suggested tool to use by the LLM.
-        2. Invokes the apppropriate tool with arguments.
-        3. Adds the result of the tool call to history (to be fed to the model again).
+        1. Saves the prior interaction (steps, token usage, id) via `_handle_interaction_exit`.
+        2. Checks for the suggested tool to use by the LLM.
+        3. Invokes the appropriate tool with arguments.
+        4. Adds the result of the tool call to history (to be fed to the model again).
+        5. Creates a new interaction so the model can use the tool result.
+
+        Expects `interaction` to contain a `function_call` step, which
+        `_is_custom_tool_call_required` establishes before this is called.
 
         Args:
             interaction (Interaction): The prior interaction instance (in which the LLM suggested which tool to use based on the prompt).
 
         Returns:
-            Interaction | None: The new interaction instance (where the model can use the result of tool to answer the original user promopt).
+            Interaction | None: The new interaction instance (where the model can use the result of tool to answer the original user prompt).
+                                None if the interaction has no steps, the requested tool is
+                                not recognised, or the new interaction could not be created.
         """
         self._handle_interaction_exit(interaction)
 
@@ -436,19 +389,29 @@ class Conversation:
                         "result": [{"type": "text", "text": json.dumps(result)}],
                     }
                 )
-                current_interaction = self._create_interaction()
+                current_interaction = self.client.create_primary_interaction(
+                    self.model_name,
+                    self.history,
+                    self.previous_interaction_id,
+                    self.tools,
+                    self.config["model"]["system_instruction_prompt"],
+                )
         return current_interaction
 
     def _is_custom_tool_call_required(self, interaction: Interaction) -> bool:
         """
-        Determines if custom tool call is being done or not.
+        Determines if a custom tool call needs to be handled for this interaction.
+
+        True only if a custom (function) tool was declared in the request AND the model
+        actually responded with a `function_call` step. A declared tool the model chose
+        not to call (it answered directly) is not a tool call.
 
         Args:
-            interaction (Interaction): The prior interaction instance (in which the LLM
-            suggested which tool to use based on the prompt).
+            interaction (Interaction): The interaction returned by the model for the
+                                       current request.
 
         Returns:
-            bool: Whether custom tool call is being done or not.
+            bool: Whether the model asked for a custom tool to be called.
         """
         tool_call_required_via_tools_list = False
         tool_call_required_via_response = False
@@ -463,32 +426,41 @@ class Conversation:
                     break
         return tool_call_required_via_tools_list and tool_call_required_via_response
 
-    def ask(
-        self, question: str
-    ) -> tuple[str, dict[str, dict[str, str]], dict[str, int], dict[str, int]]:
+    def ask(self, question: str) -> tuple[str, Citations, TokenUsage, TokenUsage]:
         """
         Asks a question to the model and returns the response.
 
         1. Adds the question to the conversation history.
-        2. Creates an interaction with the model (adding appropriate tools)
-        3. If the interaction is successful, retrieves the model's response, extracts a title, saves
-           the interaction steps to history, and records the token usage.
-        4. If the interaction fails, removes the most recent question from the history and raises a
+        2. Sets up the tools needed for the question (url context, custom tool, google search).
+        3. Creates an interaction with the model (adding appropriate tools).
+        4. If the model asked for a custom tool, runs it and creates a follow-up interaction
+           so the model can answer using the tool result.
+        5. If the interaction is successful, retrieves the model's response and citations,
+           extracts a title (first response only), saves the interaction steps to history,
+           and records the token usage.
+        6. If an interaction fails, removes the most recent question from the history and raises a
            ValueError.
-        5. Responds with the model's answer, total token usage, and current interaction token usage.
 
         Args:
             question (str): The question to ask the model.
+
         Returns:
-            Tuple[str, dict[str, dict[str, str]], dict[str, int], dict[str, int]]: A tuple containing the model's response,
-                                                        citations, total token usage, and current
-            interaction token usage.
+            tuple[str, Citations, TokenUsage, TokenUsage]: The model's response, the
+                citations (keyed by title, see `_retrieve_citations`), the total token
+                usage of the conversation and the token usage of this interaction.
+
         Raises:
-            ValueError: If the interaction could not be created.
+            ValueError: If an interaction could not be created.
         """
         self._add_to_history(question)
         self._setup_tool_capability(question)
-        interaction = self._create_interaction()
+        interaction = self.client.create_primary_interaction(
+            self.model_name,
+            self.history,
+            self.previous_interaction_id,
+            self.tools,
+            self.config["model"]["system_instruction_prompt"],
+        )
         if interaction is None:
             self._remove_most_recent_from_history()
             raise ValueError("Error 1: Interaction could not be created")
@@ -511,7 +483,7 @@ class Conversation:
         self._handle_interaction_exit(interaction)
         return response, citations, self.total_tokens, self.current_interaction_tokens
 
-    def persist(self):
+    def persist(self) -> None:
         """
         Persists the conversation history to a file.
 
@@ -538,12 +510,17 @@ class Conversation:
             except RuntimeError as e:
                 raise RuntimeError(f"\n\nPersist the conversation: {e}")
 
-    def reload_session_data(self, prior_session_data: dict[str, Any]):
+    def reload_session_data(self, prior_session_data: dict[str, Any]) -> None:
         """
         Reload provided session data into the conversation.
 
         Args:
-            prior_session_data (Dict[str, Any]) : Previous session data to be reloaded.
+            prior_session_data (dict[str, Any]) : Previous session data to be reloaded, as
+                                                  written by `persist`.
+
+        Raises:
+            KeyError: If prior_session_data is missing any of the expected keys
+                      (id, model_name, title, history, previous_interaction_id, total_tokens).
         """
         self.id = prior_session_data["id"]
         self.model_name = prior_session_data["model_name"]
@@ -554,14 +531,14 @@ class Conversation:
 
     def is_session_available(self) -> bool:
         """
-        Returns if the current session's conversation is available or not.
+        Returns if the current session has any conversation history to save.
 
         Returns:
-            bool : If the current session's conversation is available or not.
+            bool : True if the history has at least one entry.
         """
         return self.history is not None and len(self.history) > 0
 
-    def close(self):
+    def close(self) -> None:
         """
         Closes the conversation and releases any resources held by the client.
         """
