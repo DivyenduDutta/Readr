@@ -439,17 +439,29 @@ class Conversation:
                 current_interaction = self._create_interaction()
         return current_interaction
 
-    def _is_custom_tool_call_required(self) -> bool:
+    def _is_custom_tool_call_required(self, interaction: Interaction) -> bool:
         """
         Determines if custom tool call is being done or not.
+
+        Args:
+            interaction (Interaction): The prior interaction instance (in which the LLM
+            suggested which tool to use based on the prompt).
 
         Returns:
             bool: Whether custom tool call is being done or not.
         """
+        tool_call_required_via_tools_list = False
+        tool_call_required_via_response = False
         for tool in self.tools:
             if tool["type"] == "function":
-                return True
-        return False
+                tool_call_required_via_tools_list = True
+                break
+        if interaction.steps:
+            for step in interaction.steps:
+                if step.type == "function_call":
+                    tool_call_required_via_response = True
+                    break
+        return tool_call_required_via_tools_list and tool_call_required_via_response
 
     def ask(
         self, question: str
@@ -481,7 +493,7 @@ class Conversation:
             self._remove_most_recent_from_history()
             raise ValueError("Error 1: Interaction could not be created")
 
-        is_custom_tool_call_required = self._is_custom_tool_call_required()
+        is_custom_tool_call_required = self._is_custom_tool_call_required(interaction)
         if is_custom_tool_call_required:
             interaction = self._handle_custom_tool_call_functionality(interaction)
             if interaction is None:
