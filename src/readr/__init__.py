@@ -47,13 +47,14 @@ def main() -> None:
     Entry point for the reading companion REPL.
 
     Loads config, offers to reload a prior session or start a new one, then loops
-    reading questions from stdin and printing the model's response and token usage
-    until the user types '/quit', at which point the session is persisted.
+    reading questions from stdin and printing the model's response, any citations and
+    the token usage until the user types '/quit', at which point the session is persisted.
 
-    Errors from config loading, session reload, or the conversation loop are caught
-    and printed rather than propagated.
+    ValueError, TypeError and RuntimeError from config loading, session reload or the
+    conversation loop are logged rather than propagated, and the session is saved if
+    it has any history. Other exceptions propagate.
     """
-    conversation = None
+    conversation: Conversation | None = None
     try:
         config = load_config("readr.yml")
         selected_session_file = session_selector(config["session"]["base_path"])

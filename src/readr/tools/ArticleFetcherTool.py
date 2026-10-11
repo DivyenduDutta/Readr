@@ -9,22 +9,28 @@ from readr.utils.singleton import SingletonMeta
 class ArticleFetcherTool(metaclass=SingletonMeta):
     """
     Fetches the contents of an online article provided the URL is given.
+    A singleton: the most recently fetched article is cached.
+
+    Attributes:
+        url (str | None): The url of the most recently fetched article.
+        article_content (str | None): The extracted text of that article.
     """
 
-    def __init__(self):
-        self.url = None
-        self.article_content = None
+    def __init__(self) -> None:
+        self.url: str | None = None
+        self.article_content: str | None = None
 
     def execute(self, url: str) -> str:
         """
         The main logic of the article fetcher tool. Uses Trafilatura to fetch the online article
-        and extracts the text from it.
+        and extracts the text from it. Repeated calls with the same url return the cached text.
 
         Args:
             url (str): The url of the online article whose contents need to be fetched.
 
         Returns:
-            str: The contents of the online article.
+            str: The contents of the online article, or an empty string if no text
+                 could be extracted.
         """
         if self.url == url:
             return self.article_content if self.article_content is not None else ""
@@ -39,7 +45,8 @@ class ArticleFetcherTool(metaclass=SingletonMeta):
         Returns the description of the article fetcher tool. To be used by the LLM.
 
         Returns:
-            dict[str, Any] : The tool description.
+            dict[str, Any] : The function tool declaration (type, name, description and
+                             json schema of the parameters) sent to the model.
         """
         tool_desc = {
             "type": "function",

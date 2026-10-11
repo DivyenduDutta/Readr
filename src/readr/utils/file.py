@@ -1,9 +1,21 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, overload
 
 import yaml
+
+
+@overload
+def retrieve_file_contents(
+    relative_path: str, is_json: Literal[False] = False
+) -> str: ...
+
+
+@overload
+def retrieve_file_contents(
+    relative_path: str, is_json: Literal[True]
+) -> dict[str, Any]: ...
 
 
 def retrieve_file_contents(
@@ -16,8 +28,11 @@ def retrieve_file_contents(
         relative_path (str): The relative path to the file. Relative to the CWD.
         is_json (bool): If True, parse the file as JSON and return a dict.
                         If False (default), return the raw file contents as a string.
+
     Returns:
-       str | dict[str, Any] : The contents of the file.
+        str | dict[str, Any] : The contents of the file. A `str` when `is_json` is
+                               False, a `dict` when it is True.
+
     Raises:
         RuntimeError : If no file exists at relative_path.
     """
@@ -39,9 +54,10 @@ def save_file_contents(relative_path: str, content: dict[str, Any]) -> None:
     Args:
         relative_path (str): The relative path to the file. Relative to the CWD.
         content (dict[str, Any]): The content to be saved.
+
     Raises:
         RuntimeError: If the file cannot be written (I/O error) or content is not
-                     JSON-serializable.
+                      JSON-serializable.
     """
     try:
         file_path = Path(os.getcwd() + relative_path)
@@ -60,9 +76,10 @@ def load_config(file_name: str) -> dict[str, Any]:
 
     Returns:
         dict[str, Any]: The configuration content.
+
     Raises:
         RuntimeError : If no config file exists with the given name under
-                           src/res/configs/.
+                       src/res/configs/, or the file is not valid yaml.
     """
     try:
         file_path = Path(os.getcwd()) / "src" / "res" / "configs" / file_name

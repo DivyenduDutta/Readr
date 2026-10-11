@@ -14,7 +14,7 @@ class LoggerConfig(metaclass=SingletonMeta):
         name (str): The name of the logger. Default is "readr".
     """
 
-    def __init__(self, name: str | None = "readr"):
+    def __init__(self, name: str | None = "readr") -> None:
         self.logger_name = name
         self.log_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs"
@@ -64,9 +64,12 @@ class LoggerConfig(metaclass=SingletonMeta):
         # self._logger.addHandler(console_handler)
 
     @property
-    def logger(self):
+    def logger(self) -> logging.Logger:
         """
         Returns the configured logger instance.
+
+        Returns:
+            logging.Logger: The logger, writing to a timestamped file in the logs directory.
         """
         return self._logger
 
